@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>certchain :: blockchain visualizer</title>
+<style>
+  :root{
+    --bg: #0a0a12;
+    --panel: #12121e;
+    --panel2: #17172a;
+    --violet: #a78bfa;
+    --violet-dim: #7c5cf0;
+    --mint: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --text: #e4e1f5;
+    --muted: #7a768f;
+    --border: #2a2740;
+    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background: var(--bg);
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(124,92,240,0.10), transparent 40%),
+      radial-gradient(circle at 85% 90%, rgba(52,211,153,0.06), transparent 40%);
+    color: var(--text); font-family: var(--font-mono);
+    padding: 28px 20px 60px; min-height: 100vh;
+  }
+  .wrap{ max-width: 1220px; margin: 0 auto; }
+  .term-bar{ display:flex; align-items:center; gap:8px; background: var(--panel2); border:1px solid var(--border); border-radius: 10px 10px 0 0; padding: 10px 14px; }
+  .dot{ width:11px; height:11px; border-radius:50%; }
+  .d-red{background:#ff5f56;} .d-yellow{background:#ffbd2e;} .d-green{background:#27c93f;}
+  .term-title{ margin-left:8px; font-size:12px; color: var(--muted); }
+  .term-body{ background: var(--panel); border:1px solid var(--border); border-top:none; border-radius: 0 0 10px 10px; padding: 22px 24px 28px; }
+  .prompt{ color: var(--mint); font-size:13px; margin: 0 0 4px; }
+  .prompt span.cmd{ color: var(--violet); }
+  h1{ font-size: 20px; font-weight: 600; margin: 4px 0 6px; letter-spacing: 0.3px; }
+  .sub{ color: var(--muted); font-size: 13px; margin: 0 0 20px; max-width: 760px; }
+  .status-row{ display:flex; align-items:center; gap:10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .status-pill{ display:flex; align-items:center; gap:8px; font-size:12px; padding: 7px 14px; border-radius: 999px; border:1px solid var(--border); background: var(--panel2); }
+  .pulse{ width:8px; height:8px; border-radius:50%; background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+  .pulse.broken{ background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .pulse.mining{ background: var(--amber); box-shadow: 0 0 8px var(--amber); animation: blink 0.6s infinite; }
+  @keyframes blink{ 50%{ opacity:0.3; } }
+  .diff-row{ display:flex; align-items:center; gap:10px; margin-bottom: 22px; }
+  .diff-label{ font-size:11px; color: var(--muted); }
+  .diff-btn{ font-size:11px; padding:6px 12px; border-radius:6px; background: var(--panel2); border:1px solid var(--border); color: var(--muted); cursor:pointer; }
+  .diff-btn.active{ color: var(--violet); border-color: var(--violet-dim); }
+  #chain{ display:flex; align-items:stretch; overflow-x:auto; padding: 10px 4px 18px; gap: 0; }
+  .block{ flex: 0 0 270px; background: var(--panel2); border:1.5px solid var(--border); border-radius: 12px; padding: 14px; position:relative; transition: border-color .25s, box-shadow .25s; }
+  .block.valid{ border-color: rgba(52,211,153,0.35); }
+  .block.broken{ border-color: var(--red); box-shadow: 0 0 0 1px rgba(248,113,113,0.25), 0 0 22px rgba(248,113,113,0.15); }
+  .block.mining{ border-color: var(--amber); box-shadow: 0 0 0 1px rgba(251,191,36,0.25); }
+  .block-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .block-idx{ font-size:12px; color: var(--violet); font-weight:600; }
+  .block-tag{ font-size:10px; color: var(--muted); border:1px solid var(--border); padding:2px 7px; border-radius:5px; }
+  .block-tag.valid{ color: var(--mint); border-color: rgba(52,211,153,0.35); }
+  .block-tag.broken{ color: var(--red); border-color: rgba(248,113,113,0.4); }
+  .block-tag.mining{ color: var(--amber); border-color: rgba(251,191,36,0.4); }
+  .field-label{ font-size:10px; color: var(--muted); margin: 8px 0 3px; text-transform: uppercase; letter-spacing: .06em; }
+  textarea.cert-data{ width:100%; background: var(--bg); color: var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 8px; font-family: var(--font-mono); font-size:11.5px; resize:none; height:40px; line-height:1.4; }
+  textarea.cert-data:focus{ outline:none; border-color: var(--violet-dim); }
+  .hash-box{ font-size: 10.5px; word-break: break-all; background: var(--bg); border:1px solid var(--border); border-radius:6px; padding:7px 8px; line-height:1.5; min-height: 28px; }
+  .hash-box.this-hash{ color: var(--mint); }
+  .hash-box.prev-hash{ color: var(--muted); }
+  .hash-box.mismatch{ color: var(--red); text-decoration: line-through; text-decoration-color: rgba(248,113,113,0.5); }
+  .hash-box.mining-live{ color: var(--amber); }
+  .mini-row{ display:flex; gap:8px; margin-top:8px; }
+  .mini-stat{ flex:1; background: var(--bg); border:1px solid var(--border); border-radius:6px; padding:6px 8px; }
+  .mini-stat .k{ font-size:9px; color: var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .mini-stat .v{ font-size:12px; margin-top:2px; }
+  .v.ok{ color: var(--mint); } .v.no{ color: var(--red); } .v.pending{ color: var(--amber); }
+  .link{ flex: 0 0 46px; display:flex; align-items:center; justify-content:center; position:relative; }
+  .link svg{ overflow: visible; }
+  .link .wire{ stroke: var(--border); stroke-width: 2; }
+  .link.ok .wire{ stroke: var(--mint); }
+  .link.bad .wire{ stroke: var(--red); }
+  .link .flow{ fill: var(--mint); opacity: 0; }
+  .link.ok .flow{ animation: travel 1.6s linear infinite; }
+  @keyframes travel{ 0%{ opacity:0; transform: translateX(0); } 10%{ opacity:1; } 90%{ opacity:1; } 100%{ opacity:0; transform: translateX(40px); } }
+  .actions{ display:flex; gap:10px; margin-top: 6px; flex-wrap: wrap; }
+  button{ font-family: var(--font-mono); font-size:12px; background: var(--panel2); color: var(--text); border:1px solid var(--border); padding: 9px 16px; border-radius:7px; cursor:pointer; transition: border-color .15s, color .15s; }
+  button:hover{ border-color: var(--violet-dim); color: var(--violet); }
+  button.primary{ border-color: var(--violet-dim); color: var(--violet); }
+  button.primary:hover{ background: rgba(124,92,240,0.12); }
+  button:disabled{ opacity:0.5; cursor:not-allowed; }
+  .legend{ display:flex; gap:18px; margin-top:20px; font-size:11px; color: var(--muted); flex-wrap:wrap; }
+  .legend span{ display:inline-flex; align-items:center; gap:6px; }
+  .sw{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+  .issuer-note{ font-size:11px; color: var(--muted); margin-top:14px; }
+  .issuer-note b{ color: var(--violet); font-weight:600; }
+  ::-webkit-scrollbar{ height:8px; }
+  ::-webkit-scrollbar-thumb{ background: var(--border); border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="term-bar">
+    <div class="dot d-red"></div><div class="dot d-yellow"></div><div class="dot d-green"></div>
+    <div class="term-title">srishti@certchain — blockchain visualizer</div>
+  </div>
+  <div class="term-body">
+    <p class="prompt"><span class="cmd">$</span> certchain --mine --sign BlockCert.json</p>
+    <h1>proof-of-work mining + issuer signatures</h1>
+    <p class="sub">every block now has to be mined — its hash must start with N zeros, found by brute-forcing a nonce — and signed with the issuer's private key. edit a block's data and it stops being mined <i>and</i> its signature stops verifying, so recomputing means re-mining and re-signing everything after it.</p>
+
+    <div class="status-row">
+      <div class="status-pill"><span class="pulse" id="statusDot"></span><span id="statusText">chain valid — 4 blocks mined + signed</span></div>
+      <div class="status-pill" id="issuerPill" style="color:var(--muted)">generating issuer keypair (ECDSA P-256)…</div>
+    </div>
+
+    <div class="diff-row">
+      <span class="diff-label">mining difficulty</span>
+      <button class="diff-btn" data-d="2">easy · 00</button>
+      <button class="diff-btn active" data-d="3">medium · 000</button>
+      <button class="diff-btn" data-d="4">hard · 0000</button>
+    </div>
+
+    <div id="chain"></div>
+
+    <div class="actions">
+      <button id="appendBtn">+ append new block</button>
+      <button class="primary" id="mineBtn">recompute chain</button>
+      <button id="resetBtn">reset demo</button>
+    </div>
+
+    <div class="legend">
+      <span><i class="sw" style="background:var(--mint)"></i>mined, linked, signature valid</span>
+      <span><i class="sw" style="background:var(--amber)"></i>mining in progress</span>
+      <span><i class="sw" style="background:var(--red)"></i>broken — hash, link, or signature invalid</span>
+    </div>
+    <p class="issuer-note">issuer public key (used to verify every signature): <b id="pubKeyShort">…</b></p>
+  </div>
+</div>
+
+<script>
+function sha256hex(str){
+  function rrot(x,n){ return (x>>>n)|(x<<(32-n)); }
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const bytes=new TextEncoder().encode(str);
+  const l=bytes.length;
+  const withOne=new Uint8Array(((l+9+63)>>6)<<6);
+  withOne.set(bytes); withOne[l]=0x80;
+  const bitLen=l*8;
+  const dv=new DataView(withOne.buffer);
+  dv.setUint32(withOne.length-4, bitLen>>>0);
+  dv.setUint32(withOne.length-8, Math.floor(bitLen/4294967296));
+  const w=new Uint32Array(64);
+  for(let off=0; off<withOne.length; off+=64){
+    for(let i=0;i<16;i++) w[i]=dv.getUint32(off+i*4);
+    for(let i=16;i<64;i++){
+      const s0=rrot(w[i-15],7)^rrot(w[i-15],18)^(w[i-15]>>>3);
+      const s1=rrot(w[i-2],17)^rrot(w[i-2],19)^(w[i-2]>>>10);
+      w[i]=(w[i-16]+s0+w[i-7]+s1)|0;
+    }
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){
+      const S1=rrot(e,6)^rrot(e,11)^rrot(e,25);
+      const ch=(e&f)^((~e)&g);
+      const t1=(h+S1+ch+K[i]+w[i])|0;
+      const S0=rrot(a,2)^rrot(a,13)^rrot(a,22);
+      const maj=(a&b)^(a&c)^(b&c);
+      const t2=(S0+maj)|0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=b; b=a; a=(t1+t2)|0;
+    }
+    H=[H[0]+a|0,H[1]+b|0,H[2]+c|0,H[3]+d|0,H[4]+e|0,H[5]+f|0,H[6]+g|0,H[7]+h|0];
+  }
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+
+function short(h){ return h ? h.slice(0,14) + '…' + h.slice(-6) : ''; }
+function ab2b64(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+function b642ab(b64){ return Uint8Array.from(atob(b64), c=>c.charCodeAt(0)).buffer; }
+
+let DIFFICULTY = 3;
+let issuerKeys = null;
+let pubKeyRaw = '';
+
+async function initKeys(){
+  issuerKeys = await crypto.subtle.generateKey({ name:'ECDSA', namedCurve:'P-256' }, true, ['sign','verify']);
+  const spki = await crypto.subtle.exportKey('spki', issuerKeys.publicKey);
+  pubKeyRaw = ab2b64(spki);
+  document.getElementById('pubKeyShort').textContent = short(pubKeyRaw);
+  document.getElementById('issuerPill').textContent = 'issuer key ready — ECDSA P-256';
+}
+
+async function signHash(hashHex){
+  const sig = await crypto.subtle.sign({ name:'ECDSA', hash:'SHA-256' }, issuerKeys.privateKey, new TextEncoder().encode(hashHex));
+  return ab2b64(sig);
+}
+async function verifySig(hashHex, sigB64){
+  if(!sigB64) return false;
+  try{
+    return await crypto.subtle.verify({ name:'ECDSA', hash:'SHA-256' }, issuerKeys.publicKey, b642ab(sigB64), new TextEncoder().encode(hashHex));
+  }catch(e){ return false; }
+}
+
+function makeBlock(label, data){
+  return { label, data, timestamp: Date.now(), nonce: 0, hash: null, signature: null, mined: false };
+}
+
+let blocks = [
+  makeBlock('genesis', 'Genesis Block — BlockCert chain init'),
+  makeBlock('cert #1001', 'Name: Ananya Rao | Course: AWS Cloud Foundations | Date: 2026-02-11'),
+  makeBlock('cert #1002', 'Name: Rohan Iyer | Course: Spring Boot Certification | Date: 2026-03-04'),
+  makeBlock('cert #1003', 'Name: Meera Nair | Course: Blockchain Fundamentals | Date: 2026-04-19')
+];
+
+const chainEl = document.getElementById('chain');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+let busy = false;
+
+function target(){ return '0'.repeat(DIFFICULTY); }
+
+async function mineOne(block, prevHash, onProgress){
+  block.timestamp = Date.now();
+  let nonce = 0;
+  const t = target();
+  let h = sha256hex(block.data + prevHash + block.timestamp + nonce);
+  const CHUNK = 300;
+  while(!h.startsWith(t)){
+    for(let i=0;i<CHUNK && !h.startsWith(t); i++){
+      nonce++;
+      h = sha256hex(block.data + prevHash + block.timestamp + nonce);
+    }
+    onProgress(nonce, h);
+    await new Promise(r => setTimeout(r, 0));
+  }
+  block.nonce = nonce;
+  block.hash = h;
+  block.signature = await signHash(h);
+  block.mined = true;
+}
+
+async function evaluateChain(){
+  let prev = '0'.repeat(64);
+  const results = [];
+  for(const b of blocks){
+    const rehash = b.mined ? sha256hex(b.data + prev + b.timestamp + b.nonce) : null;
+    const hashOk = b.mined && rehash === b.hash && b.hash.startsWith(target());
+    const linkOk = b.mined && prev === (results.length ? results[results.length-1].usedPrevForNext : '0'.repeat(64));
+    const sigOk = b.mined && await verifySig(b.hash, b.signature);
+    const valid = hashOk && sigOk;
+    results.push({ hashOk, sigOk, valid, prevUsed: prev, usedPrevForNext: valid ? b.hash : prev + 'X' });
+    prev = valid ? b.hash : prev + 'X';
+  }
+  return results;
+}
+
+async function render(){
+  const evals = await evaluateChain();
+  chainEl.innerHTML = '';
+  let allValid = true;
+
+  for(let i=0;i<blocks.length;i++){
+    const b = blocks[i];
+    const ev = evals[i];
+    if(!ev.valid) allValid = false;
+    const stateClass = !b.mined ? 'broken' : (ev.valid ? 'valid' : 'broken');
+    const tagText = !b.mined ? 'unmined' : (ev.valid ? 'linked' : 'invalid');
+
+    const blockDiv = document.createElement('div');
+    blockDiv.className = 'block ' + stateClass;
+    blockDiv.id = 'block-' + i;
+    blockDiv.innerHTML = `
+      <div class="block-head">
+        <span class="block-idx">block ${i} · ${b.label}</span>
+        <span class="block-tag ${stateClass}">${tagText}</span>
+      </div>
+      <div class="field-label">certificate data</div>
+      <textarea class="cert-data" data-idx="${i}">${b.data}</textarea>
+      <div class="field-label">prev hash</div>
+      <div class="hash-box prev-hash">${short(ev.prevUsed)}</div>
+      <div class="field-label">this block's hash <span style="opacity:.6">(nonce ${b.nonce})</span></div>
+      <div class="hash-box this-hash ${!b.mined || !ev.hashOk ? 'mismatch' : ''}" id="hashbox-${i}">${b.mined ? short(b.hash) : 'not mined yet'}</div>
+      <div class="mini-row">
+        <div class="mini-stat"><div class="k">proof of work</div><div class="v ${!b.mined ? 'no' : (ev.hashOk ? 'ok':'no')}">${!b.mined ? 'missing' : (ev.hashOk ? 'valid' : 'invalid')}</div></div>
+        <div class="mini-stat"><div class="k">signature</div><div class="v ${!b.mined ? 'no' : (ev.sigOk ? 'ok':'no')}">${!b.mined ? 'missing' : (ev.sigOk ? 'verified' : 'invalid')}</div></div>
+      </div>
+    `;
+    chainEl.appendChild(blockDiv);
+
+    if(i < blocks.length - 1){
+      const linkOk = ev.valid && evals[i+1].prevUsed === b.hash;
+      const linkWrap = document.createElement('div');
+      linkWrap.className = 'link ' + (linkOk ? 'ok' : 'bad');
+      linkWrap.innerHTML = `<svg width="46" height="20" viewBox="0 0 46 20"><line x1="2" y1="10" x2="44" y2="10" class="wire"></line><circle cx="6" cy="10" r="3" class="flow"></circle></svg>`;
+      chainEl.appendChild(linkWrap);
+    }
+  }
+
+  statusDot.className = 'pulse' + (allValid ? '' : ' broken');
+  statusText.textContent = allValid
+    ? `chain valid — ${blocks.length} blocks mined + signed`
+    : 'chain broken — re-mining and re-signing needed downstream';
+
+  document.querySelectorAll('.cert-data').forEach(t => {
+    t.addEventListener('input', e => {
+      const b = blocks[+e.target.dataset.idx];
+      b.data = e.target.value;
+      b.mined = false; b.hash = null; b.signature = null; b.nonce = 0;
+      render();
+    });
+  });
+
+  document.getElementById('mineBtn').disabled = busy;
+  document.getElementById('appendBtn').disabled = busy;
+}
+
+async function recomputeChain(){
+  if(busy) return;
+  busy = true; render();
+  let prev = '0'.repeat(64);
+  for(let i=0;i<blocks.length;i++){
+    const b = blocks[i];
+    const needsMining = !b.mined || sha256hex(b.data + prev + b.timestamp + b.nonce) !== b.hash || !b.hash.startsWith(target());
+    if(needsMining){
+      statusDot.className = 'pulse mining';
+      statusText.textContent = `mining block ${i}…`;
+      const box = () => document.getElementById('hashbox-' + i);
+      await mineOne(b, prev, (nonce, h) => {
+        const el = box();
+        if(el){ el.textContent = 'nonce ' + nonce + ' — ' + short(h); el.className = 'hash-box mining-live'; }
+      });
+    }
+    prev = b.hash;
+  }
+  busy = false;
+  await render();
+}
+
+async function appendBlock(){
+  if(busy) return;
+  const n = blocks.length;
+  blocks.push(makeBlock('cert #' + (1000 + n), 'Name: New Student | Course: New Course | Date: 2026-08-17'));
+  await recomputeChain();
+}
+
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if(busy) return;
+    DIFFICULTY = +btn.dataset.d;
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    blocks.forEach(b => { b.mined=false; b.hash=null; b.signature=null; b.nonce=0; });
+    render();
+  });
+});
+
+document.getElementById('mineBtn').addEventListener('click', recomputeChain);
+document.getElementById('appendBtn').addEventListener('click', appendBlock);
+document.getElementById('resetBtn').addEventListener('click', async () => {
+  if(busy) return;
+  blocks = [
+    makeBlock('genesis', 'Genesis Block — BlockCert chain init'),
+    makeBlock('cert #1001', 'Name: Ananya Rao | Course: AWS Cloud Foundations | Date: 2026-02-11'),
+    makeBlock('cert #1002', 'Name: Rohan Iyer | Course: Spring Boot Certification | Date: 2026-03-04'),
+    makeBlock('cert #1003', 'Name: Meera Nair | Course: Blockchain Fundamentals | Date: 2026-04-19')
+  ];
+  await recomputeChain();
+});
+
+(async () => {
+  await initKeys();
+  await recomputeChain();
+})();
+</script>
+</body>
+</html>
