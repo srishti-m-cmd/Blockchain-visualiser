@@ -13,7 +13,7 @@ This project demonstrates how blocks are connected using **hashes and previous h
 <!-- Add your screenshot here -->
 
 <p align="center">
-  <img src="screenshot.png" alt="Basic Blockchain Visualizer" width="850">
+  <img src="Screenshot.png" alt="Basic Blockchain Visualizer" width="850">
 </p>
 
 ---
